@@ -99,10 +99,12 @@ That's the whole light. The two sections below add automatic/remote control.
 Do the webhook-id step **before** you copy/deploy the package (the id has to be in the file that lands in `/config`; if you already deployed, re-copy afterward).
 
 1. **Set a unique webhook id.** Run `./setup.sh` — it replaces the `statuslight_meeting_CHANGE_ME` placeholder in `status_light.yaml` with a random id (and backs up the original). Then copy/deploy and restart HA.
-2. **Create the cloud webhook.** In HA: **Settings → Home Assistant Cloud → Webhooks**. The *"Status Light - MuteDeck Receiver"* automation appears in that list once it's loaded — toggle it on and **copy the generated `https://hooks.nabu.casa/...` URL**. (The automation already sets `local_only: false`, which is what lets the cloud hook reach it.)
+2. **Create the cloud webhook.** In HA: **Settings → Home Assistant Cloud → Webhooks**. The *"Status Light - MuteDeck Receiver"* automation appears in that list once it's loaded — toggle it on and **copy the generated `https://hooks.nabu.casa/...` URL**. (The automation already sets `local_only: false`, which is what lets the cloud hook reach it.) See Nabu Casa's [Webhooks guide](https://www.nabucasa.com/config/webhooks/) for the underlying flow.
 3. **Point MuteDeck at it.** Paste that URL into **MuteDeck → Settings → Notifications** on each machine you want reporting meeting state. Mapping: in a call + camera on → **On Air**; camera off → **Busy**; not in a call → **Off**.
 
 > Keep the `hooks.nabu.casa/...` URL private — anyone who has it can drive your light. The mapping keys on MuteDeck's `call` / `video` webhook fields; if your MuteDeck version's payload or menu path differs, adjust the `status_light_mutedeck` automation.
+
+**Reference:** [Nabu Casa — Cloud webhooks](https://www.nabucasa.com/config/webhooks/) · [Home Assistant — webhook trigger](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger) · [MuteDeck — Webhook Notifications](https://mutedeck.com/help/features/webhooks/)
 
 ### Optional: Stream Deck color mirror
 

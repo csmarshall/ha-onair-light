@@ -94,15 +94,26 @@ Do the webhook-id step **before** you copy/deploy the package (the id has to be 
 
 ### Optional: Stream Deck color mirror
 
-Uses the [cgiesche `streamdeck-homeassistant`](https://github.com/cgiesche/streamdeck-homeassistant) plugin — a Stream Deck key that shows the light's live color + status (handy for a bulb that's out of sight).
+Uses the [cgiesche `streamdeck-homeassistant`](https://github.com/cgiesche/streamdeck-homeassistant) plugin (verified against plugin **v3.8.4.66**, Stream Deck app 7.x) — a single key that mirrors the light's live color + status, so you can read your status even when the bulb is out of sight.
 
-1. **Connect the plugin to HA first.** In the plugin's **Global Settings**, set your HA **Server URL** and a **long-lived access token** (HA → your profile → **Security → Long-Lived Access Tokens → Create Token**). Without the token it can't connect.
-2. **Serve the theme.** Make sure `streamdeck-theme.yml` is in `/config/www/` (`deploy.sh` does this). Set the plugin's **Custom theme URL**:
+1. **Connect the plugin to HA.** In the plugin's **Global Settings**, set your HA **Server URL** and a **long-lived access token** (HA → your profile → **Security → Long-Lived Access Tokens → Create Token**). Stream Deck keeps these (and the theme URL) in an encrypted store — there's no plaintext config file to copy between machines, so set them in the UI on each machine.
+2. **Serve the theme.** Put `streamdeck-theme.yml` in `/config/www/` (`deploy.sh` does this) and set the plugin's **Custom theme URL** (its `displayConfigUrlOverride` setting):
    - Stream Deck on the same LAN as HA: `http://<HA-IP>:8123/local/streamdeck-theme.yml`
-   - Off-LAN / via Nabu Casa: `https://<your-id>.ui.nabu.casa/local/streamdeck-theme.yml`
+   - Stream Deck remote (via Nabu Casa): `https://<your-id>.ui.nabu.casa/local/streamdeck-theme.yml`
 
-   Reconnect the plugin after setting it.
-3. **Add a key.** Use the **Entity (generic)** action bound to `sensor.status_light_status`; **Icon Source** = Home Assistant; **Label** = `{{state}}`. **Short press** → `script.status_light_toggle`; **long press** → toggle `input_boolean.status_light_strobe`.
+   The theme URL is a **separate** setting from the Server URL, so a LAN `/local/` theme URL fails from a remote machine even when the connection still works over Nabu Casa — match the theme URL to the network the Stream Deck is on. Reconnect the plugin after changing it.
+3. **The status-mirror key.** Add an **Entity (generic)** action (`de.perdoctus.streamdeck.homeassistant.entity`):
+   - **Entity:** `sensor.status_light_status`
+   - **Icon Source:** Home Assistant (`PREFER_HA`), **Layout:** Full — the theme paints the bulb glyph the light's real color (solid bulb when on, rayed bulb while strobing, dark when off).
+   - **Custom Labels:** on, **Label:** `{{status}}` — shows `Busy` / `On Air` / `Off`, etc. ⚠️ Use **`{{status}}`, not `{{state}}`** — this plugin exposes the entity's state as `status`; `{{state}}` renders empty.
+   - **Short Press → toggle the light:** Domain `script`, Service `status_light_toggle` (no target, no data).
+   - **Long Press → toggle strobe:** Domain `input_boolean`, Service `toggle`, **Service Data** `{"entity_id": "input_boolean.status_light_strobe"}` (the target goes in the service-data JSON, not the entity field).
+
+   That one key is the whole remote: glance for status, tap to toggle, hold to strobe.
+
+**Strobe speed / preset** isn't set from the Stream Deck — the long-press only flips strobe on/off, using whatever rate is currently configured. Pick the rate from the dashboard's **Strobe Preset** / **Strobe Speed** controls (the **DND** preset turns strobe on at a slow pulse).
+
+**Optional — preset keys.** To give Busy / Available / On-Air / DND / Off their own keys, add an **Entity (generic)** action per key and set its **Short Press** to Domain `script`, Service `status_light_busy` (or `_available` / `_on_air` / `_dnd` / `_off`). Bind the key to `sensor.status_light_status` too if you want it to also reflect the current state.
 
 ## Verify it works
 

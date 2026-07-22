@@ -13,6 +13,18 @@ Everything past the dashboard is optional: MuteDeck automation and the Stream De
 - **For MuteDeck automation (optional):** a **Home Assistant Cloud / [Nabu Casa](https://www.nabucasa.com/)** subscription (used to mint the public webhook), and **[MuteDeck](https://mutedeck.com)** installed on a version that supports **outbound webhook notifications**.
 - **For the Stream Deck mirror (optional):** the [cgiesche `streamdeck-homeassistant`](https://github.com/cgiesche/streamdeck-homeassistant) plugin and a Home Assistant **long-lived access token** (the plugin can't connect without one).
 
+## Hardware
+
+Any RGB/color smart bulb that shows up in Home Assistant as a `light` with `rgb_color` works. For reference, here's the exact build this was developed with — a bulb, a plug-in socket, and a shade, no lamp required:
+
+| Part | What it does |
+|------|--------------|
+| [**Aqara Smart LED Bulb T2 (E26)**](https://www.amazon.com/dp/B0DN63SFWL) — Zigbee/Thread + Matter, RGB + tunable white, 75 W-equivalent | The status light itself. Joins HA via Matter, Zigbee (ZHA/Zigbee2MQTT), or the Aqara integration, appearing as a color `light`. |
+| [**Plug-in outlet-to-E26 socket adapter**](https://www.amazon.com/dp/B0837LQ6X2) (UL-listed, 660 W) | Powers and holds the bulb straight from a wall outlet — no lamp needed. |
+| [**Small white pleated linen barrel lampshade**](https://www.amazon.com/dp/B0D8ZDQVV9) | Diffuses the bulb into a soft glow. |
+
+> Leave the socket adapter **always powered** — the package controls the *bulb's* on/off state, and the recovery automations assume the bulb stays reachable. A plug you physically switch off would defeat the "never go dark mid-meeting" guarantee.
+
 ## Quick start (dashboard only)
 
 1. Enable packages in `configuration.yaml` (one-time):

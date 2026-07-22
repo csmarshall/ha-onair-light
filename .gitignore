@@ -1,0 +1,13 @@
+# Session / local notes (never committed)
+session-state.md
+CLAUDE.local.md
+
+# Editor / OS cruft
+*.swp
+*.bak
+*.bak.*
+.DS_Store
+
+# Deploy run logs (host-specific, transient)
+*.log
+deploy_*.lo*

@@ -1,0 +1,467 @@
+# =============================================================================
+# Status Light — dedicated busy / on-air indicator
+# =============================================================================
+# A single physical bulb (input_text.status_light_target, default
+# light.status_light_bulb) driven purely as an OUTPUT. The master switch
+# input_boolean.status_light is the ONE source of truth:
+#
+#   status_light ON  + strobe OFF  -> bulb solid color
+#   status_light ON  + strobe ON   -> bulb strobes
+#   status_light OFF               -> bulb OFF   (dedicated: nothing to restore)
+#
+# No virtual overlay light, no save/restore, no is_active ghost. The dashboard
+# binds to input_boolean.status_light, so it always reflects reality — and
+# stays stably "on" while the bulb physically flickers during a strobe.
+#
+# RESILIENCE (a wrong status light is dangerous, so this matters):
+#   - State-bearing helpers have NO `initial:` -> they RESTORE across an HA
+#     restart (only status_light_target keeps a default so it's never empty).
+#   - Startup driver re-lights the bulb on HA start to match the restored state.
+#   - Recovery driver re-lights the bulb the instant it returns from
+#     'unavailable' (Zigbee/Wi-Fi reconnect, coordinator restart).
+#   - Watchdog re-asserts every 30s if the status is on but the bulb drifted off.
+#   All recovery is biased toward STAYING ON (false-busy over false-clear).
+#   Every path funnels through ONE routine: script.status_light_refresh.
+#
+# Presets (scripts) set a complete look and turn the light on. Call them from:
+#   - the dashboard
+#   - the Home Assistant Stream Deck plugin (script.status_light_*)
+#   - the MuteDeck receiver automations (meeting state -> preset)
+#
+# MuteDeck pushes a webhook (native outbound webhook feature) on every status change. A meeting is a
+# meeting, so ALL machines POST to ONE shared webhook URL; HA maps {call, video}
+# -> a meeting state and drives the matching preset (last event wins).
+#   in a call + camera on  -> on_air
+#   in a call + camera off -> busy
+#   not in a call          -> off
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Helpers.  NOTE: only status_light_target has an `initial:` — everything else
+# omits it ON PURPOSE so it restores its last value across an HA restart.
+# -----------------------------------------------------------------------------
+input_boolean:
+  status_light:
+    name: Status Light
+    icon: mdi:lightbulb-on
+  status_light_strobe:
+    name: Status Light Strobe
+    icon: mdi:flash
+
+input_text:
+  status_light_color:
+    name: Status Light Color (RGB)
+    icon: mdi:palette
+  status_light_target:
+    name: Status Light Target Entity
+    # CHANGE THIS to YOUR bulb entity. Default is a placeholder; a default is
+    # kept only so this helper is never empty on first run.
+    initial: light.status_light_bulb
+    icon: mdi:lightbulb
+
+input_number:
+  status_light_brightness:
+    name: Status Light Brightness
+    min: 1
+    max: 255
+    step: 1
+    icon: mdi:brightness-7
+  status_light_strobe_speed:
+    name: Status Light Strobe Speed
+    min: 0.05
+    max: 5
+    step: 0.05
+    unit_of_measurement: "Hz"
+    icon: mdi:tune
+
+input_select:
+  status_light_strobe_preset:
+    name: Status Light Strobe Preset
+    options:
+      - "Custom"
+      - "Very Slow Pulse (0.1 Hz)"
+      - "Aviation Beacon (0.5 Hz)"
+      - "Slow Strobe (1 Hz)"
+      - "Medium Strobe (2 Hz)"
+      - "Fast Strobe (3 Hz)"
+      - "Emergency (4 Hz)"
+    icon: mdi:speedometer
+  # Meeting state derived from MuteDeck. A meeting is a meeting — every machine
+  # shares ONE webhook and this ONE state (last event wins). First option "off"
+  # is the safe first-run default; restores across restart.
+  status_light_meeting:
+    name: Meeting State (MuteDeck)
+    options: ["off", "busy", "on_air"]
+    icon: mdi:video-account
+
+# -----------------------------------------------------------------------------
+# Scripts
+# -----------------------------------------------------------------------------
+script:
+  # THE single "state -> bulb" authority. Every trigger path calls this (async,
+  # via script.turn_on, because the strobe branch loops). mode: restart means a
+  # new call cleanly supersedes any in-flight strobe loop. Reads live state, so
+  # it needs no parameters, and has fallbacks so a first-run/empty value is safe.
+  status_light_refresh:
+    alias: Status Light - Refresh (drive bulb to match state)
+    mode: restart
+    variables:
+      target: "{{ states('input_text.status_light_target') }}"
+      rgb: >
+        {% set c = states('input_text.status_light_color') %}
+        {{ c | from_json if c not in ['', 'unknown', 'unavailable', 'None'] else [255, 0, 0] }}
+      bri: "{{ states('input_number.status_light_brightness') | int(255) }}"
+      hz: "{{ states('input_number.status_light_strobe_speed') | float(1) }}"
+      on_time: "{{ [0.3, (1.0 / hz) * 0.4] | max }}"
+      off_time: "{{ (1.0 / hz) - on_time }}"
+    sequence:
+      - choose:
+          # OFF -> bulb off
+          - conditions:
+              - condition: state
+                entity_id: input_boolean.status_light
+                state: "off"
+            sequence:
+              - service: light.turn_off
+                target:
+                  entity_id: "{{ target }}"
+                data:
+                  transition: 1
+          # ON + STROBE -> flashing loop, then hand back to solid if still on
+          - conditions:
+              - condition: state
+                entity_id: input_boolean.status_light
+                state: "on"
+              - condition: state
+                entity_id: input_boolean.status_light_strobe
+                state: "on"
+            sequence:
+              - repeat:
+                  while:
+                    - condition: state
+                      entity_id: input_boolean.status_light
+                      state: "on"
+                    - condition: state
+                      entity_id: input_boolean.status_light_strobe
+                      state: "on"
+                  sequence:
+                    - service: light.turn_on
+                      target:
+                        entity_id: "{{ target }}"
+                      data:
+                        rgb_color: "{{ rgb }}"
+                        brightness: "{{ bri }}"
+                        transition: 0
+                    - delay:
+                        seconds: "{{ on_time }}"
+                    - service: light.turn_off
+                      target:
+                        entity_id: "{{ target }}"
+                      data:
+                        transition: 0
+                    - delay:
+                        seconds: "{{ off_time }}"
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.status_light
+                    state: "on"
+                then:
+                  - service: light.turn_on
+                    target:
+                      entity_id: "{{ target }}"
+                    data:
+                      rgb_color: "{{ rgb }}"
+                      brightness: "{{ bri }}"
+                      transition: 1
+        # ON + no strobe -> steady color
+        default:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ target }}"
+            data:
+              rgb_color: "{{ rgb }}"
+              brightness: "{{ bri }}"
+              transition: 1
+
+  # Generic setter: apply a complete look, then turn the light on.
+  status_light_apply:
+    alias: Status Light - Apply
+    mode: restart
+    fields:
+      color:
+        description: "RGB as a [r,g,b] string"
+        example: "[255,0,0]"
+      brightness:
+        description: "1-255"
+        example: 255
+      strobe:
+        description: "true/false"
+        example: false
+    sequence:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.status_light_color
+        data:
+          value: "{{ color | default('[255, 0, 0]') }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.status_light_brightness
+        data:
+          value: "{{ brightness | default(255) | int }}"
+      - service: "input_boolean.turn_{{ 'on' if (strobe | default(false)) else 'off' }}"
+        target:
+          entity_id: input_boolean.status_light_strobe
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.status_light
+
+  status_light_busy:
+    alias: Status Light - Busy
+    icon: mdi:door-closed-lock
+    sequence:
+      - service: script.status_light_apply
+        data:
+          color: "[255, 0, 0]"
+          brightness: 255
+          strobe: false
+
+  status_light_available:
+    alias: Status Light - Available
+    icon: mdi:door-open
+    sequence:
+      - service: script.status_light_apply
+        data:
+          color: "[0, 255, 0]"
+          brightness: 160
+          strobe: false
+
+  status_light_on_air:
+    alias: Status Light - On Air
+    icon: mdi:broadcast
+    sequence:
+      - service: script.status_light_apply
+        data:
+          color: "[139, 0, 0]"
+          brightness: 255
+          strobe: false
+
+  status_light_dnd:
+    alias: Status Light - Do Not Disturb
+    icon: mdi:minus-circle
+    sequence:
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.status_light_strobe_preset
+        data:
+          option: "Very Slow Pulse (0.1 Hz)"
+      - service: script.status_light_apply
+        data:
+          color: "[255, 40, 0]"
+          brightness: 200
+          strobe: true
+
+  status_light_off:
+    alias: Status Light - Off
+    icon: mdi:lightbulb-off
+    sequence:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.status_light
+
+  status_light_toggle:
+    alias: Status Light - Toggle
+    icon: mdi:lightbulb
+    sequence:
+      - service: input_boolean.toggle
+        target:
+          entity_id: input_boolean.status_light
+
+# -----------------------------------------------------------------------------
+# Automations
+# -----------------------------------------------------------------------------
+automation:
+  # DRIVE: any change to the state/look re-drives the bulb (async — the strobe
+  # branch loops, so we start refresh via script.turn_on and never block).
+  - id: status_light_drive
+    alias: Status Light - Drive
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id:
+          - input_boolean.status_light
+          - input_boolean.status_light_strobe
+          - input_text.status_light_color
+          - input_number.status_light_brightness
+    action:
+      - service: script.turn_on
+        target:
+          entity_id: script.status_light_refresh
+
+  # STARTUP RECOVERY: re-light the bulb to match the restored state after an HA
+  # restart. Small delay lets the bulb integration finish loading.
+  - id: status_light_startup
+    alias: Status Light - Startup Recovery
+    mode: restart
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      - delay:
+          seconds: 8
+      - service: script.turn_on
+        target:
+          entity_id: script.status_light_refresh
+
+  # RECONNECT RECOVERY: the instant the bulb returns from 'unavailable', re-drive
+  # it if the status is on. (Hard-coded to light.status_light_bulb — update this
+  # entity_id if you change input_text.status_light_target.)
+  - id: status_light_recover
+    alias: Status Light - Reconnect Recovery
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: light.status_light_bulb
+        from: "unavailable"
+    condition:
+      - condition: state
+        entity_id: input_boolean.status_light
+        state: "on"
+    action:
+      - service: script.turn_on
+        target:
+          entity_id: script.status_light_refresh
+
+  # WATCHDOG: every 30s, if the status is on (solid) but the bulb drifted off,
+  # re-assert. Only acts on drift, so no flicker in normal operation. Strobe is
+  # excluded (its loop self-asserts, and the bulb is legitimately off mid-flash).
+  - id: status_light_watchdog
+    alias: Status Light - Watchdog
+    mode: single
+    trigger:
+      - platform: time_pattern
+        seconds: "/30"
+    condition:
+      - condition: state
+        entity_id: input_boolean.status_light
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.status_light_strobe
+        state: "off"
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: light.status_light_bulb
+            state: "on"
+    action:
+      - service: script.turn_on
+        target:
+          entity_id: script.status_light_refresh
+
+  # Strobe preset dropdown <-> manual Hz slider (bidirectional).
+  - id: status_light_strobe_preset_sync
+    alias: Status Light - Strobe Preset Sync
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_select.status_light_strobe_preset
+        id: preset
+      - platform: state
+        entity_id: input_number.status_light_strobe_speed
+        id: speed
+    variables:
+      speed_map:
+        "Very Slow Pulse (0.1 Hz)": 0.1
+        "Aviation Beacon (0.5 Hz)": 0.5
+        "Slow Strobe (1 Hz)": 1.0
+        "Medium Strobe (2 Hz)": 2.0
+        "Fast Strobe (3 Hz)": 3.0
+        "Emergency (4 Hz)": 4.0
+    action:
+      - choose:
+          - conditions: "{{ trigger.id == 'preset' }}"
+            sequence:
+              - variables:
+                  new_speed: "{{ speed_map.get(states('input_select.status_light_strobe_preset'), none) }}"
+              - condition: template
+                value_template: "{{ new_speed is not none }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.status_light_strobe_speed
+                data:
+                  value: "{{ new_speed }}"
+          - conditions: "{{ trigger.id == 'speed' }}"
+            sequence:
+              - condition: template
+                value_template: >
+                  {{ speed_map.get(states('input_select.status_light_strobe_preset'), -1)
+                     != states('input_number.status_light_strobe_speed') | float }}
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.status_light_strobe_preset
+                data:
+                  option: "Custom"
+
+  # MuteDeck receiver — one webhook, shared by every machine. Maps {call, video}
+  # to a meeting state and drives the matching preset. A meeting is a meeting,
+  # so all machines POST to this same URL; the last event wins.
+  - id: status_light_mutedeck
+    alias: Status Light - MuteDeck Receiver
+    mode: queued
+    trigger:
+      # Placeholder webhook id. Run ./setup.sh to generate a unique random id
+      # (or set your own), then reload/restart HA. After that, create a Nabu
+      # Casa cloud webhook (or otherwise expose this webhook) and paste the
+      # resulting hooks.nabu.casa/... URL into MuteDeck on each machine.
+      - platform: webhook
+        webhook_id: statuslight_meeting_CHANGE_ME
+        allowed_methods: [POST]
+        local_only: false
+    variables:
+      desired: >
+        {% set call = trigger.json.call | default('') %}
+        {% set video = trigger.json.video | default('') %}
+        {% if call == 'active' %}{{ 'on_air' if video == 'active' else 'busy' }}{% else %}off{% endif %}
+    action:
+      # Record the derived meeting state (dashboard readout)
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.status_light_meeting
+        data:
+          option: "{{ desired }}"
+      # Drive the light via the matching preset
+      - choose:
+          - conditions: "{{ desired == 'on_air' }}"
+            sequence:
+              - service: script.status_light_on_air
+          - conditions: "{{ desired == 'busy' }}"
+            sequence:
+              - service: script.status_light_busy
+        default:
+          - service: script.status_light_off
+
+# -----------------------------------------------------------------------------
+# Template sensor — a single glanceable status for the Stream Deck HA plugin.
+# Collapses the light's state into one readable value (updates live over the
+# HA WebSocket): Off / Busy / Available / On Air / Do Not Disturb / Strobing /
+# On. Bind a Stream Deck key to sensor.status_light_status to see it in real
+# time regardless of color; attributes carry the raw rgb/brightness/strobe too.
+# -----------------------------------------------------------------------------
+template:
+  - sensor:
+      - name: "Status Light Status"
+        unique_id: status_light_status
+        icon: "{% if is_state('input_boolean.status_light','off') %}mdi:lightbulb-outline{% elif is_state('input_boolean.status_light_strobe','on') %}mdi:lightbulb-on{% else %}mdi:lightbulb{% endif %}"
+        state: "{% if is_state('input_boolean.status_light','off') %}Off{% else %}{% set c = states('input_text.status_light_color') %}{% set s = is_state('input_boolean.status_light_strobe','on') %}{% if c == '[139, 0, 0]' %}On Air{% elif c == '[255, 0, 0]' and not s %}Busy{% elif c == '[0, 255, 0]' %}Available{% elif c == '[255, 40, 0]' and s %}Do Not Disturb{% elif s %}Strobing{% else %}On{% endif %}{% endif %}"
+        attributes:
+          # Live mirror for a remote display (e.g. Stream Deck): `hex` is the
+          # bulb's current color as #RRGGBB when on, dark grey when off — bind
+          # the button's color template to it. `on`/`strobe` drive icon choice.
+          "on": "{{ is_state('input_boolean.status_light', 'on') }}"
+          strobe: "{{ is_state('input_boolean.status_light_strobe', 'on') }}"
+          rgb: "{{ states('input_text.status_light_color') }}"
+          brightness: "{{ states('input_number.status_light_brightness') }}"
+          meeting: "{{ states('input_select.status_light_meeting') }}"
+          # `hex` is the Stream Deck DISPLAY color (not the bulb). It's lifted
+          # ~20% toward white so the small icon glyph reads brighter on the dark
+          # key; the physical bulb still uses the true rgb. Tune the 0.2 factor.
+          hex: "{% if is_state('input_boolean.status_light','off') %}#202020{% else %}{% set c = states('input_text.status_light_color') %}{% set r = (c | from_json) if c not in ['','unknown','unavailable','None'] else [255,0,0] %}{% set f = 0.2 %}{{ '#%02x%02x%02x' | format((r[0]+(255-r[0])*f)|int, (r[1]+(255-r[1])*f)|int, (r[2]+(255-r[2])*f)|int) }}{% endif %}"

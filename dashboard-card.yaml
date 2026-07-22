@@ -1,0 +1,62 @@
+# Status Light — Lovelace card.
+# Add via: Edit dashboard -> Add card -> Manual, then paste this YAML.
+type: vertical-stack
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: input_boolean.status_light
+        name: Status
+        icon: mdi:lightbulb-on
+        tap_action:
+          action: toggle
+      - type: tile
+        entity: input_boolean.status_light_strobe
+        name: Strobe
+        icon: mdi:flash
+        tap_action:
+          action: toggle
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: button
+        name: Busy
+        icon: mdi:door-closed-lock
+        tap_action: { action: perform-action, perform_action: script.status_light_busy }
+      - type: button
+        name: Available
+        icon: mdi:door-open
+        tap_action: { action: perform-action, perform_action: script.status_light_available }
+      - type: button
+        name: On Air
+        icon: mdi:broadcast
+        tap_action: { action: perform-action, perform_action: script.status_light_on_air }
+      - type: button
+        name: DND
+        icon: mdi:minus-circle
+        tap_action: { action: perform-action, perform_action: script.status_light_dnd }
+      - type: button
+        name: "Off"
+        icon: mdi:lightbulb-off
+        tap_action: { action: perform-action, perform_action: script.status_light_off }
+  - type: entities
+    title: Status Light — Settings
+    entities:
+      - entity: input_text.status_light_color
+        name: Color (RGB)
+        icon: mdi:palette
+      - entity: input_number.status_light_brightness
+        name: Brightness
+        icon: mdi:brightness-7
+      - entity: input_select.status_light_strobe_preset
+        name: Strobe Preset
+      - entity: input_number.status_light_strobe_speed
+        name: Strobe Speed (Hz)
+  - type: entities
+    title: Live Status
+    entities:
+      - entity: sensor.status_light_status
+        name: Status Light Is
+      - entity: input_select.status_light_meeting
+        name: Meeting (MuteDeck)

@@ -1,0 +1,364 @@
+# https://mycolor.space/?hex=%23845EC2&sub=1
+#_states:
+#  unavailable:
+#    color: "#505050"
+#
+#[domain]:
+#  icon: mdi:lightbulb
+#  labelTemplates:
+#    -
+#    -
+#    - {state}
+#  classes:
+#    [class]:
+#      icon: mdi:lightbulb
+#      color: #FFFFFF
+#      labelTemplates:
+#      states:
+#        [state]:
+#          icon: mdi:mdi:lightbulb-on
+#          color: #FFFFFF
+#          labelTemplates:
+
+_color: '#AAAAAA'
+_labelTemplates:
+  - ''
+  - ''
+  - |
+    {% if (state | float('f')) == 'f' -%}
+      {{ state }}
+    {% else -%}
+      {{ state | round(2) }}{{unit_of_measurement}}
+    {% endif %}
+_states:
+  unavailable:
+    color: '#FF6F91'
+  unknown:
+    color: '#FF6F91'
+  error:
+    color: '#FF6F91'
+  # ======================== On-States ======================
+  on:
+    color: '#ffd484'
+  playing:
+    color: '#ffd484'
+  open:
+    color: '#ffd484'
+  opening:
+    color: '#ffd484'
+  home:
+    color: '#ffd484'
+  locked:
+    color: '#ffd484'
+  heat:
+    color: '#ffd484'
+  active:
+    color: '#ffd484'
+  # =========================================================
+
+switch:
+  labelTemplates: []
+  icon: mdi:toggle-switch-off
+  states:
+    on:
+      icon: mdi:toggle-switch
+
+light:
+  labelTemplates: []
+  icon: mdi:lightbulb
+  color: '#888888'
+  feedbackLayout: '$B1'
+  feedback: |
+    {% set defaultBrightness = (255 if state === 'on' else 0) %}
+    {% set brightness = attributes.brightness | default(defaultBrightness, true) %}
+    {
+      "indicator": {{ brightness / 255 * 100 }},
+      "value": "{{ (brightness / 255 * 100) | int }}%"
+    }
+  states:
+    unavailable:
+      icon: mdi:lightbulb-alert
+    on:
+      color: '#ffd484'
+
+input_boolean:
+  labelTemplates: []
+  icon: mdi:toggle-switch-off
+  states:
+    on:
+      icon: mdi:toggle-switch
+
+update:
+  icon: mdi:package
+  states:
+    on:
+      icon: mdi:package
+      color: '#FF8066'
+
+person:
+  icon: mdi:account
+  states:
+    not_home:
+      icon: mdi:account-arrow-right
+
+binary_sensor:
+  labelTemplates: []
+  icon: mdi:radiobox-blank
+  states:
+    on:
+      icon: mdi:radiobox-marked
+  classes:
+    plug:
+      icon: mdi:power-plug-off-outline
+      states:
+        on:
+          icon: mdi:power-plug-outline
+    window:
+      icon: mdi:window-closed-variant
+      states:
+        on:
+          icon: mdi:window-open-variant
+    door:
+      icon: mdi:door-closed
+      states:
+        on:
+          icon: mdi:door-open
+    motion:
+      icon: mdi:motion-sensor
+      states:
+        off:
+          icon: mdi:motion-sensor-off
+
+cover:
+  icon: mdi:garage
+  states:
+    open:
+      icon: mdi:garage-open
+    closing:
+      icon: mdi:arrow-down-box
+    opening:
+      icon: mdi:arrow-up-box
+
+sensor:
+  # --- Status Light color mirror: sensors carrying a `hex` attribute (only
+  # --- sensor.status_light_status) render their icon in the bulb's real color.
+  color: "{% if attributes.hex is defined %}{{ attributes.hex }}{% else %}#AAAAAA{% endif %}"
+  classes:
+    carbon_dioxide:
+      icon: mdi:molecule-co2
+      color: |
+        {% set numState = state | int %}
+        {% if numState <= 1000 %}
+          #00FF00
+        {% elif numState <= 2000 %}
+          #FFA500
+        {% else %}
+          #FF0000
+        {% endif %}
+    humidity:
+      icon: mdi:water-percent
+      color: '#2C73D2'
+    atmospheric_pressure:
+      icon: mdi:thermometer-lines
+      color: '#2C73D2'
+    temperature:
+      icon: mdi:thermometer
+      color: |
+        {% set numState = state | int %}
+        {% if attributes.unit_of_measurement == '°F' %}
+          {% set numState = (numState - 32) * 5 / 9  %}
+        {% endif %}
+        {% if numState <= -20 %}
+          #0000FF
+        {% elif numState <= -15 %}
+          #0040FF
+        {% elif numState <= -10 %}
+          #0080FF
+        {% elif numState <= -5 %}
+          #00BFFF
+        {% elif numState <= 0 %}
+          #87CEFA
+        {% elif numState <= 5 %}
+          #B0E0E6
+        {% elif numState <= 10 %}
+          #90EE90
+        {% elif numState <= 15 %}
+          #ADFF2F
+        {% elif numState <= 20 %}
+          #FFFF00
+        {% elif numState <= 25 %}
+          #FFA500        
+        {% else %}
+          #FF0000
+        {% endif %}
+
+    battery:
+      feedbackLayout: '$B1'
+      feedback: |
+        {
+          "indicator": {{ state | int }},
+          "value": "{{ state | int }}%"
+        }
+      icon: |
+        {% set numState = state | int %}
+        {% if numState <= 10 %}
+          mdi:battery-outline
+        {% elif numState <= 20 %}
+          mdi:battery-10
+        {% elif numState <= 30 %}
+          mdi:battery-20
+        {% elif numState <= 40 %}
+          mdi:battery-30
+        {% elif numState <= 50 %}
+          mdi:battery-40
+        {% elif numState <= 60 %}
+          mdi:battery-50
+        {% elif numState <= 70 %}
+          mdi:battery-60
+        {% elif numState <= 80 %}
+          mdi:battery-70
+        {% elif numState <= 90 %}
+          mdi:battery-80
+        {% else %}
+          mdi:battery
+        {% endif %}
+      color: |
+        {% set numState = state | int %}
+        {% if numState <= 10 %}
+          #ff0000
+        {% elif numState <= 20 %}
+          #e21c00
+        {% elif numState <= 30 %}
+          #c63800
+        {% elif numState <= 40 %}
+          #aa5500
+        {% elif numState <= 50 %}
+          #8d7100
+        {% elif numState <= 60 %}
+          #718d00
+        {% elif numState <= 70 %}
+          #55aa00
+        {% elif numState <= 80 %}
+          #38c600
+        {% elif numState <= 90 %}
+          #1ce200
+        {% elif numState <= 100 %}
+          #00ff00        
+        {% else %}
+          #505050
+        {% endif %}
+    power:
+      icon: mdi:flash
+      color: '#F9F871'
+    power_factor:
+      icon: mdi:angle-acute
+    voltage:
+      icon: mdi:flash
+      color: '#F9F871'
+    energy:
+      icon: mdi:lightning-bolt
+      color: '#F9F871'
+    current:
+      icon: mdi:current-ac
+      color: '#2C73D2'
+
+weather:
+  labelTemplates:
+    - ''
+    - ''
+    - '{{temperature}}{{temperature_unit}}'
+    - '{{humidity}}%'
+  states:
+    clear-night:
+      icon: mdi:weather-night
+    cloudy:
+      icon: mdi:weather-cloudy
+    fog:
+      icon: mdi:weather-fog
+    hail:
+      icon: mdi:weather-hail
+    lightning:
+      icon: mdi:weather-lightning
+    lightning-rainy:
+      icon: mdi:weather-lightning-rainy
+    partlycloudy:
+      icon: mdi:weather-partly-cloudy
+    pouring:
+      icon: mdi:weather-puring
+    rainy:
+      icon: mdi:weather-rainy
+    snowy:
+      icon: mdi:weather-snowy
+    snowy-rainy:
+      icon: mdi:weather-snowy-rainy
+    sunny:
+      icon: mdi:weather-sunny
+    windy:
+      icon: mdi:weather-windy
+    windy-variant:
+      icon: mdi:weather-windy-variant
+
+lock:
+  icon: mdi:lock
+  states:
+    unlocked:
+      icon: mdi:lock-open
+    locking:
+      icon: mdi:lock-clock
+    unlocking:
+      icon: mdi:lock-clock
+    locked:
+      icon: mdi:lock
+    jammed:
+      icon: mdi:lock-open-alert
+
+vacuum:
+  icon: mdi:robot-vacuum
+  states:
+    cleaning:
+      color: '#00C9A7'
+    returning:
+      color: '#F9F871'
+
+lawn_mower:
+  icon: mdi:robot-mower
+  states:
+    mowing:
+      color: '#00C9A7'
+    paused:
+      color: '#F9F871'
+    returning:
+      color: '#F9F871'
+
+fan:
+  labelTemplates:
+    - ''
+    - ''
+    - |
+      {{'~' if oscillating}}
+  icon: mdi:fan
+  states:
+    off:
+      icon: mdi:fan-off
+
+media_player:
+  icon: mdi:play-circle
+  color: '#AAAAAA'
+  labelTemplates:
+    - ''
+    - ''
+    - '{{ media_title }}'
+    - '{{ media_artist}}'
+  states:
+    playing:
+      color: '#00C937'
+      icon: mdi:play
+    paused:
+      color: '#F9F871'
+      icon: mdi:pause
+    idle:
+      color: '#505050'
+      icon: mdi:stop
+    off:
+      color: '#505050'
+      icon: mdi:television-off

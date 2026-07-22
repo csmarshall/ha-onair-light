@@ -1,0 +1,39 @@
+name: Release
+
+# Cut a release whenever a version tag is pushed, e.g.:
+#   git tag v1.0.0 && git push origin v1.0.0
+# Packages the install files into ha-onair-light-<tag>.zip and attaches it.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build bundle
+        run: |
+          set -euo pipefail
+          BUNDLE="ha-onair-light"
+          mkdir "$BUNDLE"
+          cp status_light.yaml streamdeck-theme.yml deploy.sh setup.sh \
+             dashboard-card.yaml README.md LICENSE "$BUNDLE"/
+          zip -r "${BUNDLE}-${GITHUB_REF_NAME}.zip" "$BUNDLE"
+          ls -l "${BUNDLE}-${GITHUB_REF_NAME}.zip"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "ha-onair-light-${GITHUB_REF_NAME}.zip" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -4,6 +4,8 @@ A **dedicated** status light for a home office: one physical bulb that shows whe
 
 Everything past the dashboard is optional: MuteDeck automation and the Stream Deck color mirror each stand alone, so you can start with just a dashboard button.
 
+> 📦 **Download:** grab the latest `ha-onair-light-vX.Y.Z.zip` bundle from the [Releases](https://github.com/csmarshall/ha-onair-light/releases) page, or clone this repo.
+
 ## Prerequisites
 
 - **A color (RGB) smart bulb, dedicated to this.** It's driven as a pure output and turned fully *off* when you're clear, so don't use a bulb you also want as normal room lighting.

@@ -105,7 +105,7 @@ Uses the [cgiesche `streamdeck-homeassistant`](https://github.com/cgiesche/strea
 3. **The status-mirror key.** Add an **Entity (generic)** action (`de.perdoctus.streamdeck.homeassistant.entity`):
    - **Entity:** `sensor.status_light_status`
    - **Icon Source:** Home Assistant (`PREFER_HA`), **Layout:** Full — the theme paints the bulb glyph the light's real color (solid bulb when on, rayed bulb while strobing, dark when off).
-   - **Custom Labels:** on, **Label:** `{{status}}` — shows `Busy` / `On Air` / `Off`, etc. ⚠️ Use **`{{status}}`, not `{{state}}`** — this plugin exposes the entity's state as `status`; `{{state}}` renders empty.
+   - **Custom Labels:** on, **Label:** `{{state}}` — shows `Busy` / `On Air` / `Off`, etc. (If your label comes up blank, try `{{status}}` — the state variable's name has differed across plugin versions.)
    - **Short Press → toggle the light:** Domain `script`, Service `status_light_toggle` (no target, no data).
    - **Long Press → toggle strobe:** Domain `input_boolean`, Service `toggle`, **Service Data** `{"entity_id": "input_boolean.status_light_strobe"}` (the target goes in the service-data JSON, not the entity field).
 

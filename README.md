@@ -173,4 +173,6 @@ Uses the [cgiesche `streamdeck-homeassistant`](https://github.com/cgiesche/strea
 
 ## Credits
 
+By **[Charles Marshall](https://github.com/csmarshall)**.
+
 Adapted from an MIT-licensed Home Assistant community "Notify Light" template. MuteDeck integration via [mutedeck.com](https://mutedeck.com). Stream Deck support via the [`streamdeck-homeassistant`](https://github.com/cgiesche/streamdeck-homeassistant) plugin by cgiesche.
